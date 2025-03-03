@@ -9,6 +9,55 @@ import sys
 import sklearn as sk
 import numpy as np
 import pandas as pd
+import pickle
+import json
+#Preprocesado
+
+def cat_numerico(df):
+    cat_columns = df.select_dtypes(exclude=['number']).columns
+    df[cat_columns] = df[cat_columns].apply(lambda x: pd.factorize(x)[0])
+    return df
+
+###############ESCALADO############
+def z_score(v):
+    #input: it expects a column from the data frame
+    #output: the column will be scaled using the z-score technique
+    
+    # copy the column
+    v_norm = v
+    # apply the z-score method
+    v_norm = (v - v.mean()) / v.std()
+    return v_norm
+def maximum_absolute_scaling(df):
+    #input: a whole dataFrame
+    #output: a whole dataFrame where integer type columns with a mean value > 60 will be scaled
+    
+    print(df.head())
+    # copy the dataframe
+    df_scaled = df.copy()
+    # apply maximum absolute scaling
+    for column in df_scaled.columns:
+        if df_scaled.dtypes[column] == np.int64 and df_scaled[column].mean()>60:
+            df_scaled[column] = df_scaled[column]  / df_scaled[column].abs().max()
+    return df_scaled
+def min_max_scaling(v):
+    #input: it expects a column from the data frame
+    #output: the column will be scaled using the min-max technique
+    
+    # copy the column
+    v_norm = v
+    # apply min-max scaling
+    #for column in df_norm.columns:
+    v_norm = (v - v.min()) / (v.max() - v.min())
+
+    return v_norm 
+def escaladoEstandar(dt):
+    # Escalamos los datos
+    from sklearn.preprocessing import StandardScaler
+    sc = StandardScaler()
+    dt= sc.fit_transform(dt)
+    return dt
+
 
 def load_data(file):
     """
@@ -66,11 +115,36 @@ def kNN(data, k, weights, p):
     np.random.seed(42)  # Set a random seed for reproducibility
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25)
     
-    # Escalamos los datos
-    from sklearn.preprocessing import StandardScaler
-    sc = StandardScaler()
-    X_train = sc.fit_transform(X_train)
-    X_test = sc.transform(X_test)
+    if miJson['preproceso']['Preprocesar?']=='si' :
+        if miJson['preproceso']['scaling']=='standar' :
+         # Escalamos los datos de forma standard
+         from sklearn.preprocessing import StandardScaler
+         sc = StandardScaler()
+         X_train = sc.fit_transform(X_train)
+         X_test = sc.transform(X_test)
+        elif miJson['preproceso']['scaling']=='absmaxmin' :
+            # Escalamos los datos de forma absminmax
+            X_train=maximum_absolute_scaling(X_train)
+            X_test=maximum_absolute_scaling(X_test)
+        elif miJson['preproceso']['scaling']=='minmax' :
+            # Escalamos los datos de forma minmax
+            cols=X_train.columns
+            for col in cols :
+                min_max_scaling(col)
+            cols=X_test.columns
+            for col in cols :
+                min_max_scaling(col)
+        elif miJson['preproceso']['scaling']=='zscore' :
+            # Escalamos los datos de forma zscore
+            cols=X_train.columns
+            for col in cols :
+                z_score(col)
+            cols=X_test.columns
+            for col in cols :
+                z_score(col)
+
+
+
     
     # Entrenamos el modelo
     from sklearn.neighbors import KNeighborsClassifier
@@ -83,6 +157,8 @@ def kNN(data, k, weights, p):
     return y_test, y_pred
 
 if __name__ == "__main__":
+    with open('config.json', 'r', encoding='utf-8') as file:
+        miJson = json.load(file)  
     # Comprobamos que se han introducido los parámetros correctos
     if len(sys.argv) < 3:
         print("Error en los parámetros de entrada")
@@ -91,10 +167,11 @@ if __name__ == "__main__":
     
     # Cargamos los datos
     data = load_data(sys.argv[1])
-    
     # Implementamos el algoritmo kNN
     y_test, y_pred = kNN(data, int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else 'uniform', int(sys.argv[4]) if len(sys.argv) > 4 else 2)
     
+    # Mostramos la matriz de confusión
+
     # Mostramos la matriz de confusión
     print("\nMatriz de confusión:")
     print(calculate_confusion_matrix(y_test, y_pred))
