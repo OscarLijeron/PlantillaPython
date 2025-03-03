@@ -1,0 +1,17 @@
+{
+    "preproceso":{
+        "Preprocesar?": "si",
+        "categorial_features":[""],
+        "missing_values": "imputar",
+        "impute_strategy": "mean",
+        "scaling": "standar",
+        "text_precess": "tf-idf",
+        "sampling": "undersampling"
+
+    },
+    "df_Caracteristicas":{
+        "Target":" ",
+        "Cols":" "
+    }
+    
+}
