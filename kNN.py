@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Autor: Xabier Gabiña Barañano
 Script para la implementación del algoritmo kNN
 Recoge los datos de un fichero csv y los clasifica en función de los k vecinos más cercanos
 """
@@ -11,11 +10,84 @@ import numpy as np
 import pandas as pd
 import pickle
 import json
-#Preprocesado
+from sklearn.impute import SimpleImputer
+import unicodedata
+import re
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
-def cat_numerico(df):
-    cat_columns = df.select_dtypes(exclude=['number']).columns
-    df[cat_columns] = df[cat_columns].apply(lambda x: pd.factorize(x)[0])
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
+
+#Preprocesado
+def limpiar_texto(texto):
+    """
+    Limpia y normaliza texto basado en configuraciones de `miJson`:
+    - Convierte a minúsculas
+    - Elimina acentos y caracteres especiales
+    - Elimina stopwords
+    - Aplica lematización
+    """
+
+    # Obtener la configuración de preprocesamiento
+    opciones = miJson.get('preproceso', {}).get('normalize_vector', [])
+
+    lemmatizer = WordNetLemmatizer()
+    stop_words_list = set(stopwords.words("spanish")) if "stopwords" in opciones else set()
+
+    # Si el texto es NaN, None o vacío, devolverlo sin cambios
+    if texto is None or texto == "" or pd.isna(texto):
+        return texto
+
+    # 1. Convertir a minúsculas
+    if "minusculas" in opciones:
+        texto = texto.lower().strip()
+
+    # 2. Quitar acentos
+    if "acentos" in opciones:
+        texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('utf-8')
+
+    # 3. Eliminar caracteres especiales y números
+    if "caracEsp" in opciones:
+        texto = re.sub(r'[^a-z\s]', '', texto)
+
+    # 4. Tokenizar el texto (convertir en lista de palabras)
+    palabras = word_tokenize(texto, language="spanish") if "tokenizar" in opciones else texto.split()
+
+    # 5. Eliminar stopwords y aplicar lematización si está activado
+    if "lematizar" in opciones:
+        palabras = [lemmatizer.lemmatize(p) for p in palabras if p not in stop_words_list]
+
+    # 6. Unir palabras procesadas en una sola cadena
+    texto_limpio = " ".join(palabras)
+
+    return texto_limpio
+
+def cat_numerico(df, columnas):
+    """
+    Convierte columnas categóricas a numéricas usando pd.factorize().
+    
+    Parámetros:
+    - df: DataFrame de Pandas
+    - columnas: Lista de nombres de columnas a convertir (opcional).
+                Si es None, convierte todas las categóricas.
+
+    Retorna:
+    - DataFrame con las columnas convertidas a valores numéricos.
+    """
+    if columnas is None:
+        # Si no se especifican columnas, convertir todas las categóricas
+        columnas = df.select_dtypes(exclude=['number']).columns.tolist()
+    else:
+        # Filtrar solo las que existen en el DataFrame
+        columnas = [col for col in columnas if col in df.columns]
+
+    # Aplicar pd.factorize() a las columnas seleccionadas
+    df[columnas] = df[columnas].apply(lambda x: pd.factorize(x)[0])
+    
     return df
 
 ###############ESCALADO############
@@ -115,6 +187,7 @@ def kNN(data, k, weights, p):
     np.random.seed(42)  # Set a random seed for reproducibility
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25)
     
+    ##### Preproceso ######
     if miJson['preproceso']['Preprocesar?']=='si' :
         if miJson['preproceso']['scaling']=='standar' :
          # Escalamos los datos de forma standard
@@ -142,6 +215,26 @@ def kNN(data, k, weights, p):
             cols=X_test.columns
             for col in cols :
                 z_score(col)
+        # mising values
+        if miJson['preproceso']['missing_values']=='imputar' :
+            if miJson['preproceso']['impute_strategy']=='mean' :
+                imputer = SimpleImputer(strategy="mean")
+            elif miJson['preproceso']['impute_strategy']=='mode' : 
+                imputer = SimpleImputer(strategy="most_frequent")
+            cols_imputar=miJson['preproceso']['cols_imputar']
+            X_train[cols_imputar] = imputer.fit_transform(X_train[cols_imputar])
+            X_test[cols_imputar] = imputer.fit_transform(X_test[cols_imputar])
+        # Pasar de categorial a númerico
+        if miJson['preproceso']['cat_num?']=='si' :
+            cat_numerico(X_train,miJson['preproceso']['categorial_features'])
+            cat_numerico(X_test,miJson['preproceso']['categorial_features'])
+        if miJson['preproceso']['normalize?']=='si' :
+            cols_simplificar=miJson['preproceso']['normalize_features']
+            for col in cols_simplificar:
+                X_train[col + "_limpio"] = X_train[col].apply(lambda x: limpiar_texto(x))
+                X_test[col + "_limpio"] = X_test[col].apply(lambda x: limpiar_texto(x))
+
+
 
 
 
@@ -167,15 +260,18 @@ if __name__ == "__main__":
     
     # Cargamos los datos
     data = load_data(sys.argv[1])
+    # Nombre de la columna que quieres mover
+    columna_target = miJson["df_Caracteristicas"]["Target"]
+
+    # Reorganizar el DataFrame para mover el target al final
+    data = data[[col for col in data.columns if col != columna_target] + [columna_target]]
+
     # Implementamos el algoritmo kNN
     y_test, y_pred = kNN(data, int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else 'uniform', int(sys.argv[4]) if len(sys.argv) > 4 else 2)
     
     # Mostramos la matriz de confusión
-
-    # Mostramos la matriz de confusión
     print("\nMatriz de confusión:")
     print(calculate_confusion_matrix(y_test, y_pred))
-
-    # Mostramos el F-score
-    print("\nF-score:")
-    print(calculate_fscore(y_test, y_pred))
+  
+  
+   
