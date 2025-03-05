@@ -1,16 +1,21 @@
 {
     "preproceso":{
         "Preprocesar?": "si",
+        "cat_num?": "si",
         "categorial_features":[""],
         "missing_values": "imputar",
         "impute_strategy": "mean",
+        "cols_imputar": [""],
         "scaling": "standar",
-        "text_precess": "tf-idf",
+        "text_proces": "tf-idf",
+        "normalize?": "no",
+        "normalize_features": [""],
+        "normalize_vector":["","","",""],
         "sampling": "undersampling"
 
     },
     "df_Caracteristicas":{
-        "Target":" ",
+        "Target":"Especie",
         "Cols":" "
     }
     
