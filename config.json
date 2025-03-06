@@ -1,11 +1,20 @@
-{
-    "preproceso":{
+"preproceso":{
         "Preprocesar?": "si",
         "cat_num?": "si",
-        "categorial_features":[""],
-        "missing_values": "imputar",
+        "categorial_features":["A_CRAINJ_FORMAT", "A_CT_FORMAT", "A_D15_19_FORMAT", "A_D15_20_FORMAT",
+        "A_D16_19_FORMAT", "A_D16_20_FORMAT", "A_D16_24_FORMAT",
+        "A_D21_24_FORMAT", "A_D65PLS_FORMAT", "A_DIST_FORMAT", "A_DOW_FORMAT",
+        "A_DROWSY_FORMAT", "A_HR_FORMAT", "A_INTER_FORMAT", "A_INTSEC_FORMAT",
+        "A_JUNC_FORMAT", "A_LT_FORMAT", "A_MANCOL_FORMAT", "A_MC_FORMAT",
+        "A_PEDAL_FORMAT", "A_PEDAL_F_FORMAT", "A_PED_FORMAT", "A_PED_F_FORMAT",
+        "A_POLPUR_FORMAT", "A_POSBAC_FORMAT", "A_RD_FORMAT", "A_REGION_FORMAT",
+        "A_RELRD_FORMAT", "A_ROADFC_FORMAT", "A_ROLL_FORMAT", "A_RU_FORMAT",
+        "A_SPCRA_FORMAT", "A_TOD_FORMAT", "A_WEATHER_FORMAT", "BIA_FORMAT",
+        "INDIAN_RES_FORMAT", "SPJ_INDIAN_FORMAT", "STATE_FORMAT"
+        ],
+        "missing_values": "imputar", 
         "impute_strategy": "mean",
-        "cols_imputar": [""],
+        "cols_imputar": ["A_PEDAL","A_PEDAL_F"], 
         "scaling": "standar",
         "text_proces": "tf-idf",
         "normalize?": "no",
@@ -15,7 +24,7 @@
 
     },
     "df_Caracteristicas":{
-        "Target":"Especie",
+        "Target":"STATE",
         "Cols":" "
     }
     
