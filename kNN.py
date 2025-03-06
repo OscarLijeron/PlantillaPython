@@ -22,7 +22,19 @@ nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('wordnet')
 
-#Preprocesado
+
+
+def guardarModelo(clf):
+    nombreModel = "nombreParAlmacenar.sav"
+    with open(nombreModel, 'wb') as archivo:
+        pickle.dump(clf, archivo)
+    print("Modelo guardado correctamente empleando Pickle")
+
+def cargarModelo(nombreModel):
+    with open(nombreModel, 'rb') as archivo:
+        modelo = pickle.load(archivo)
+    return modelo
+#Preprocesado      
 def limpiar_texto(texto):
     """
     Limpia y normaliza texto basado en configuraciones de `miJson`:
@@ -186,9 +198,59 @@ def kNN(data, k, weights, p):
     from sklearn.model_selection import train_test_split
     np.random.seed(42)  # Set a random seed for reproducibility
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25)
+    print("Dimensiones de X_train:", X_train.shape)
+    print("Dimensiones de X_test:", X_test.shape)
+
     
     ##### Preproceso ######
     if miJson['preproceso']['Preprocesar?']=='si' :
+        # mising values
+        
+
+        if isinstance(X_train, np.ndarray):
+            print("⚠️ X_train es un numpy.ndarray. Convirtiéndolo a DataFrame...")
+            cols = data.columns.tolist()[:-1]            
+            X_train = pd.DataFrame(X_train,columns=cols)
+            X_test = pd.DataFrame(X_test,columns=cols)
+        print("Columnas en X_train:", X_train.columns.tolist())
+
+        if miJson['preproceso']['missing_values'] == 'imputar':
+            print("Imputación en proceso.")
+            # Configurar la estrategia de imputación
+            if miJson['preproceso']['impute_strategy'] == 'mean':
+                    imputer = SimpleImputer(strategy="mean")
+                    print("Metodo es mean")
+            elif miJson['preproceso']['impute_strategy'] == 'mode':
+                    imputer = SimpleImputer(strategy="most_frequent")
+            # Obtener las columnas a imputar desde el JSON
+            cols_imputar = miJson['preproceso'].get('cols_imputar', [])
+    
+            # Verificar si las columnas a imputar existen en X_train
+            cols_imputar_validas = [col for col in cols_imputar if col in X_train.columns]
+            print(cols_imputar_validas)
+            print("Valores NaN en las columnas a imputar:", X_train[cols_imputar_validas].isnull().sum())
+            if cols_imputar_validas:  # Solo imputar si hay columnas válidas
+                X_train[cols_imputar_validas] = imputer.fit_transform(X_train[cols_imputar_validas])
+                X_test[cols_imputar_validas] = imputer.transform(X_test[cols_imputar_validas])
+                print("Imputación completada.")
+            else:
+                print(f"⚠️ Advertencia: No se encontraron las columnas {cols_imputar} en X_train. Verifica los nombres.")    
+        print("Valores faltantes en X_train:", X_train.isnull().sum())
+
+        # Pasar de categorial a númerico
+        if miJson['preproceso']['cat_num?']=='si' :
+            cols_cat_num= miJson['preproceso'].get('categorial_features', [])
+            cat_numerico(X_train,cols_cat_num)
+            cat_numerico(X_test,cols_cat_num)
+            for col in miJson['preproceso']['categorial_features']:
+                print(f"Valores únicos en {col}: {X_train[col].unique()}")
+
+        if miJson['preproceso']['normalize?']=='si' :
+            cols_simplificar=miJson['preproceso']['normalize_features']
+            for col in cols_simplificar:
+                X_train[col + "_limpio"] = X_train[col].apply(lambda x: limpiar_texto(x))
+                X_test[col + "_limpio"] = X_test[col].apply(lambda x: limpiar_texto(x))
+        
         if miJson['preproceso']['scaling']=='standar' :
          # Escalamos los datos de forma standard
          from sklearn.preprocessing import StandardScaler
@@ -215,24 +277,8 @@ def kNN(data, k, weights, p):
             cols=X_test.columns
             for col in cols :
                 z_score(col)
-        # mising values
-        if miJson['preproceso']['missing_values']=='imputar' :
-            if miJson['preproceso']['impute_strategy']=='mean' :
-                imputer = SimpleImputer(strategy="mean")
-            elif miJson['preproceso']['impute_strategy']=='mode' : 
-                imputer = SimpleImputer(strategy="most_frequent")
-            cols_imputar=miJson['preproceso']['cols_imputar']
-            X_train[cols_imputar] = imputer.fit_transform(X_train[cols_imputar])
-            X_test[cols_imputar] = imputer.fit_transform(X_test[cols_imputar])
-        # Pasar de categorial a númerico
-        if miJson['preproceso']['cat_num?']=='si' :
-            cat_numerico(X_train,miJson['preproceso']['categorial_features'])
-            cat_numerico(X_test,miJson['preproceso']['categorial_features'])
-        if miJson['preproceso']['normalize?']=='si' :
-            cols_simplificar=miJson['preproceso']['normalize_features']
-            for col in cols_simplificar:
-                X_train[col + "_limpio"] = X_train[col].apply(lambda x: limpiar_texto(x))
-                X_test[col + "_limpio"] = X_test[col].apply(lambda x: limpiar_texto(x))
+        
+        
 
 
 
@@ -259,12 +305,21 @@ if __name__ == "__main__":
         sys.exit(1)
     
     # Cargamos los datos
-    data = load_data(sys.argv[1])
+    data = load_data(sys.argv[1])  # Cargar los datos desde el archivo CSV
+
+    print("Tipo de data:", type(data))  # Verificar si es un DataFrame
+    print("Primeras filas de data:\n", data.head())  # Ver las primeras filas
+
     # Nombre de la columna que quieres mover
     columna_target = miJson["df_Caracteristicas"]["Target"]
-
     # Reorganizar el DataFrame para mover el target al final
     data = data[[col for col in data.columns if col != columna_target] + [columna_target]]
+    
+    # Verificar las columnas categóricas y numéricas
+    categorical_columns = data.select_dtypes(include=['object']).columns
+    numerical_columns = data.select_dtypes(include=['number']).columns
+    print("Columnas categóricas:", categorical_columns)
+    print("Columnas numéricas:", numerical_columns)
 
     # Implementamos el algoritmo kNN
     y_test, y_pred = kNN(data, int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else 'uniform', int(sys.argv[4]) if len(sys.argv) > 4 else 2)
