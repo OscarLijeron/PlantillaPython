@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ -*- coding: utf-8 -*-
 """
 Script para la implementación del algoritmo kNN
 Recoge los datos de un fichero csv y los clasifica en función de los k vecinos más cercanos
@@ -23,6 +23,35 @@ nltk.download('punkt')
 nltk.download('wordnet')
 
 
+def concatenar_columnas(data, columnas):
+    """
+    Concatenar varias columnas en un nuevo columna llamada 'concatenada'.
+    
+    Parámetros:
+    - X_train: DataFrame de pandas que contiene las columnas a concatenar.
+    - columnas: Lista de nombres de las columnas que deseas concatenar.
+    - sep: Separador que se usará para concatenar las columnas (por defecto es ',').
+    
+    Retorna:
+    - DataFrame con la columna 'concatenada' añadida.
+    """
+    sep=' '
+    # Verificar que la lista de columnas tiene al menos dos columnas
+    if len(columnas) < 2:
+        raise ValueError("La lista de columnas debe contener al menos dos columnas.")
+    
+    # Asegurarse de que no haya valores NaN antes de concatenar
+    for col in columnas:
+        data[col] = data[col].fillna('')  # Reemplazar NaN por una cadena vacía
+    
+    # Usar str.cat() para concatenar las columnas seleccionadas
+    data[columnas[0]] = data[columnas[0]].str.cat(data[columnas[1]], sep=sep)
+    
+    # Si hay más de dos columnas, concatenarlas
+    for col in columnas[2:]:
+        data[columnas[0]] = data[columnas[0]].str.cat(data[col], sep=sep)
+    
+    return data
 
 def guardarModelo(clf):
     nombreModel = "nombreParAlmacenar.sav"
@@ -48,7 +77,7 @@ def limpiar_texto(texto):
     opciones = miJson.get('preproceso', {}).get('normalize_vector', [])
 
     lemmatizer = WordNetLemmatizer()
-    stop_words_list = set(stopwords.words("spanish")) if "stopwords" in opciones else set()
+    stop_words_list = set(stopwords.words("english")) if "stopwords" in opciones else set()
 
     # Si el texto es NaN, None o vacío, devolverlo sin cambios
     if texto is None or texto == "" or pd.isna(texto):
@@ -67,7 +96,7 @@ def limpiar_texto(texto):
         texto = re.sub(r'[^a-z\s]', '', texto)
 
     # 4. Tokenizar el texto (convertir en lista de palabras)
-    palabras = word_tokenize(texto, language="spanish") if "tokenizar" in opciones else texto.split()
+    palabras = word_tokenize(texto, language="english") if "tokenizar" in opciones else texto.split()
 
     # 5. Eliminar stopwords y aplicar lematización si está activado
     if "lematizar" in opciones:
@@ -149,7 +178,9 @@ def load_data(file):
     :param file: Fichero csv
     :return: Datos del fichero
     """
-    data = pd.read_csv(file)
+    data = pd.read_csv(file, encoding="latin1")
+
+    #data = pd.read_csv(file, encoding="utf-8")
     return data
 
 def calculate_fscore(y_test, y_pred):
@@ -204,8 +235,6 @@ def kNN(data, k, weights, p):
     
     ##### Preproceso ######
     if miJson['preproceso']['Preprocesar?']=='si' :
-        # mising values
-        
 
         if isinstance(X_train, np.ndarray):
             print("⚠️ X_train es un numpy.ndarray. Convirtiéndolo a DataFrame...")
@@ -213,6 +242,10 @@ def kNN(data, k, weights, p):
             X_train = pd.DataFrame(X_train,columns=cols)
             X_test = pd.DataFrame(X_test,columns=cols)
         print("Columnas en X_train:", X_train.columns.tolist())
+
+        # Concatenar con un delimitador, como una coma
+        X_train=concatenar_columnas(X_train,miJson['preproceso']['cols_concatenar'])
+        X_test=concatenar_columnas(X_test,miJson['preproceso']['cols_concatenar'])
 
         if miJson['preproceso']['missing_values'] == 'imputar':
             print("Imputación en proceso.")
@@ -248,8 +281,9 @@ def kNN(data, k, weights, p):
         if miJson['preproceso']['normalize?']=='si' :
             cols_simplificar=miJson['preproceso']['normalize_features']
             for col in cols_simplificar:
-                X_train[col + "_limpio"] = X_train[col].apply(lambda x: limpiar_texto(x))
-                X_test[col + "_limpio"] = X_test[col].apply(lambda x: limpiar_texto(x))
+                X_train[col] = X_train[col].fillna('').apply(lambda x: limpiar_texto(x))
+                X_test[col] = X_test[col].fillna('').apply(lambda x: limpiar_texto(x))
+            print(X_train.head())  # Esto imprimirá las primeras 5 filas de todas las columnas por defecto
         
         if miJson['preproceso']['scaling']=='standar' :
          # Escalamos los datos de forma standard
@@ -277,10 +311,14 @@ def kNN(data, k, weights, p):
             cols=X_test.columns
             for col in cols :
                 z_score(col)
-        
-        
+        cols_eliminar=miJson['preproceso']['cols_eliminar']
+        X_train = X_train.drop(cols_eliminar, axis=1)
+        X_test= X_test.drop(cols_eliminar, axis=1)
+
+   
 
 
+   
 
 
 
@@ -309,6 +347,14 @@ if __name__ == "__main__":
 
     print("Tipo de data:", type(data))  # Verificar si es un DataFrame
     print("Primeras filas de data:\n", data.head())  # Ver las primeras filas
+    # Identificar las columnas 'Unnamed' en el DataFrame
+    unnamed_cols = [col for col in data.columns if 'Unnamed' in col]
+
+    # Renombrar las columnas 'Unnamed' de forma que tengan nombres más significativos
+    new_names = {col: f"New_Column_{i}" for i, col in enumerate(unnamed_cols)}
+
+    # Renombrar las columnas
+    data.rename(columns=new_names, inplace=True)
 
     # Nombre de la columna que quieres mover
     columna_target = miJson["df_Caracteristicas"]["Target"]
@@ -323,7 +369,6 @@ if __name__ == "__main__":
 
     # Implementamos el algoritmo kNN
     y_test, y_pred = kNN(data, int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else 'uniform', int(sys.argv[4]) if len(sys.argv) > 4 else 2)
-    
     # Mostramos la matriz de confusión
     print("\nMatriz de confusión:")
     print(calculate_confusion_matrix(y_test, y_pred))
