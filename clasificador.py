@@ -94,6 +94,21 @@ def load_data(file):
         print(Fore.RED+"Error al cargar los datos"+Fore.RESET)
         print(e)
         sys.exit(1)
+'''def load_data1(file):
+    """
+    Función para cargar los datos de un fichero csv
+    :param file: Fichero csv
+    :return: Datos del fichero
+    """
+    try:
+        data = pd.read_csv(file, encoding="latin1",on_bad_lines='skip')
+        #data = pd.read_csv(file, encoding='utf-8')
+        print(Fore.GREEN+"Datos cargados con éxito"+Fore.RESET)
+        return data
+    except Exception as e:
+        print(Fore.RED+"Error al cargar los datos"+Fore.RESET)
+        print(e)
+        sys.exit(1)'''
 
 # Funciones para calcular métricas
 
@@ -200,7 +215,8 @@ def preproceso():
         numerical_feature, text_feature, categorical_feature = select_features()
 
         # Concatenar con un delimitador
-        data=concatenar_columnas(data,args.preproceso['cols_concatenar'])
+        if args.preproceso['cols_concatenar'][0]!="no":
+            data=concatenar_columnas(data,args.preproceso['cols_concatenar'])
 
         if args.preproceso['missing_values'] == 'imputar':
             print("Imputación en proceso.")
@@ -233,10 +249,17 @@ def preproceso():
             print(f"🗑 Eliminando filas con valores faltantes en las columnas: {cols_imputar}")
             data.dropna(subset=cols_imputar, inplace=True)    
         print("Valores faltantes en data:", data.isnull().sum())
+
+        if args.preproceso['cols_outliers'][0]!="no":
+            for colum in args.preproceso['cols_outliers']:
+                remove_outliers_iqr(colum)
         
         # Pasar de categorial a númerico
         if args.preproceso['cat_num?']=='si' :
-            cols_cat_num= categorical_feature
+            if args.preproceso['categorial_features'][0]!='no' :
+                cols_cat_num=args.preproceso['categorial_features']
+            else:
+                cols_cat_num= categorical_feature
             cat_numerico(data,cols_cat_num)
             for col in categorical_feature:
                 print(f"Valores únicos en {col}: {data[col].unique()}")
@@ -245,7 +268,7 @@ def preproceso():
             cols_simplificar=text_feature
             for col in cols_simplificar:
                 data[col] = data[col].fillna('').apply(lambda x: limpiar_texto(x))
-            print(data.head())  # Esto imprimirá las primeras 5 filas de todas las columnas por defecto
+        print(data.head())  # Esto imprimirá las primeras 5 filas de todas las columnas por defecto
         process_text(text_feature)
         
         if args.preproceso['scaling']=='standar' :
@@ -265,9 +288,10 @@ def preproceso():
             for col in cols :
                 z_score(col)
         #eliminamos cols
-        cols_eliminar=args.preproceso['cols_eliminar']
-        data = data.drop(cols_eliminar, axis=1)
-
+        if args.preproceso['cols_eliminar'][0]!= "no":
+            cols_eliminar=args.preproceso['cols_eliminar']
+            data = data.drop(cols_eliminar, axis=1)
+            
         # Realizamos Oversampling o Undersampling
         over_under_sampling()
         print("Despues del preprocesado")  
@@ -315,6 +339,28 @@ def cargarModelo(nombreModel):
     with open(nombreModel, 'rb') as archivo:
         modelo = pickle.load(archivo)
     return modelo
+def remove_outliers_iqr(column):
+    """
+    Elimina los outliers utilizando el método del Rango Intercuartílico (IQR).
+    
+    Parámetros:
+    - df: DataFrame, el conjunto de datos.
+    - column: str, el nombre de la columna sobre la que se aplicará la detección de outliers.
+    
+    Retorna:
+    - df: DataFrame, el conjunto de datos sin los outliers.
+    """
+    global data
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    
+    # Definimos el límite inferior y superior para los outliers
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    # Filtramos los valores fuera de este rango
+    data = data[(data[column] >= lower_bound) & (data[column] <= upper_bound)]
 #Preprocesado      
 def limpiar_texto(texto):
     """
@@ -386,6 +432,8 @@ def cat_numerico(df, columnas):
 ###############ESCALADO############
 def z_score(v):
     """Escala una columna usando el método Z-Score."""
+    print(type(v))
+    v = np.array(v, dtype=float) if isinstance(v, (list, np.ndarray, pd.Series)) else v
     if not np.issubdtype(v.dtype, np.number):  # Verifica si es numérica
         return v  # Retorna sin cambios si es texto
     return (v - v.mean()) / v.std()
@@ -398,6 +446,13 @@ def maximum_absolute_scaling(df):
     return df_scaled
 def min_max_scaling(v):
     """Escala una columna usando el método Min-Max."""
+    # Convertir a NumPy array asegurando que sean números
+    try:
+        v = np.array(v, dtype=float)  # Convierte a números si es posible
+    except ValueError:
+        print("Error: La columna contiene valores no numéricos.", v)
+        return None  # Evita procesar datos incorrectos
+    print(type(v))
     if not np.issubdtype(v.dtype, np.number):
         return v  # Retorna sin cambios si es texto
     return (v - v.min()) / (v.max() - v.min())
@@ -519,9 +574,11 @@ def divide_data():
 
     Retorna:
     - x_train: DataFrame con las características de entrenamiento.
-    - x_dev: DataFrame con las características de desarrollo.
+    - x_dev: DataFrame con las características de desarrollo para evaluar el entrenamiento.
     - y_train: Serie con las etiquetas de entrenamiento.
-    - y_dev: Serie con las etiquetas de desarrollo.
+    - y_dev: Serie con las etiquetas de desarrollo para evaluar el entrenamiento.
+    - x_dev: DataFrame con las características de desarrollo para evaluar un modelo entrenado.
+    - y_dev: Serie con las etiquetas de desarrollo para evaluar un modelo entrenado.
     """
     global data
     # Nombre de la columna que quieres mover
@@ -534,7 +591,14 @@ def divide_data():
     
     # Dividimos los datos en entrenamiento y dev
     x_train, x_dev, y_train, y_dev = train_test_split(x, y, test_size=0.25, random_state=42)
-    return x_train, x_dev, y_train, y_dev
+    x_dev,x_devTest, y_dev,y_devTest = train_test_split(x_dev, y_dev, test_size=0.5, random_state=42)
+    print(f"Shape de X_train: {x_train.shape}")
+    print(f"Shape de X_dev: {x_dev.shape}")
+    print(f"Shape de X_devTest: {x_devTest.shape}")
+    if args.mode=='train' :
+        return x_train, x_dev, y_train, y_dev
+    elif args.mode == "test":
+        return x_devTest,y_devTest
 
 def save_model(gs):
     """
@@ -725,11 +789,37 @@ def predict():
         Ninguno
     """
     global data
+   # Seleccionamos las características (todas las columnas menos la de predicción)
+    x_data = data.drop(columns=[args.prediction])
+
     # Predecimos
-    prediction = model.predict(data)
+    prediction = model.predict(x_data)
     
-    # Añadimos la prediccion al dataframe data
-    data = pd.concat([data, pd.DataFrame(prediction, columns=[args.prediction])], axis=1)
+    prediction_column_name = args.prediction + "Prediccion"
+    data = pd.concat([data, pd.DataFrame(prediction, columns=[prediction_column_name])], axis=1)
+def predictTest(X_devTest):
+    """
+    Realiza una predicción utilizando el modelo entrenado y guarda los resultados en un archivo CSV.
+
+    Parámetros:
+        X_devTest:Datos para evaluar sin el targert
+    Retorna:
+        X_devTest:Datos evaaluados con el targert
+    """
+    
+    # Verifica si X_devTest es un array de NumPy y lo convierte en DataFrame si es necesario
+    if not isinstance(X_devTest, pd.DataFrame):
+        X_devTest = pd.DataFrame(X_devTest)
+
+    # Predecimos
+    prediction = model.predict(X_devTest)
+    
+    prediction_column_name = args.prediction + "Prediccion"
+    X_devTest = pd.concat([X_devTest, pd.DataFrame(prediction, columns=[prediction_column_name])], axis=1)
+    return X_devTest
+
+
+
     
 # Función principal
 
@@ -807,13 +897,25 @@ if __name__ == "__main__":
         # Predecimos
         print("\n- Prediciendo...")
         try:
-            predict()
+            x_devTest,y_devTest=divide_data()
+            X_devTestPred=predictTest(x_devTest)
             print(Fore.GREEN+"Predicción realizada con éxito"+Fore.RESET)
             # Guardamos el dataframe con la prediccion
-            data.to_csv('output/data-prediction.csv', index=False)
-            print(Fore.GREEN+"Predicción guardada con éxito"+Fore.RESET)
+            #data.to_csv('output/data-prediction.csv', index=False)
+            y_pred=X_devTestPred[args.prediction + "Prediccion"]
+            
+
+            
+            # Calcula las métricas
+            print(Fore.MAGENTA + "> F1-score micro:\n" + Fore.RESET, calculate_fscore(y_devTest, y_pred))
+            print(Fore.MAGENTA + "> F1-score macro:\n" + Fore.RESET, calculate_fscore(y_devTest, y_pred))
+            print(Fore.MAGENTA + "> Informe de clasificación:\n" + Fore.RESET, calculate_classification_report(y_devTest, y_pred))
+            print(Fore.MAGENTA + "> Matriz de confusión:\n" + Fore.RESET, calculate_confusion_matrix(y_devTest, y_pred))
+
+            print(Fore.GREEN + "Predicción guardada con éxito" + Fore.RESET)
             sys.exit(0)
         except Exception as e:
+            print("adios")
             print(e)
             sys.exit(1)
     else:
