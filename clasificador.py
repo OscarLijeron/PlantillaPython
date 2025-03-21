@@ -21,7 +21,7 @@ import re
 from colorama import Fore
 # Sklearn
 from sklearn.calibration import LabelEncoder
-from sklearn.metrics import f1_score, confusion_matrix, classification_report
+from sklearn.metrics import f1_score, confusion_matrix, classification_report,recall_score, roc_auc_score,accuracy_score
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MaxAbsScaler, MinMaxScaler, Normalizer, StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -111,6 +111,42 @@ def load_data(file):
         sys.exit(1)'''
 
 # Funciones para calcular métricas
+def calcular_metricas_y_guardar(col_verdadero, col_predicho, archivo_salida="modeloSalida"):
+    #Crea un archivo csvdonde estan los valores reales predecidos por el modelo y al final escribe las metricasque ha sacado el modelo
+    # Crear carpeta output si no existe
+    output = "output"
+    os.makedirs(output, exist_ok=True)
+    archivo_salida = os.path.join(output, archivo_salida)
+    
+    # Crear DataFrame con los datos proporcionados
+    df = pd.DataFrame({
+        'Verdadero': col_verdadero,
+        'Predicho': col_predicho
+    })
+    
+    # Calcular métricas
+    accuracy = accuracy_score(col_verdadero, col_predicho)
+    f1 = f1_score(col_verdadero, col_predicho, average='weighted')
+    recall = recall_score(col_verdadero, col_predicho, average='weighted')
+    
+    # Asegurarse de que roc_auc_score sea adecuado según el tipo de problema
+    if len(set(col_verdadero)) == 2:  # Solo aplica para clasificación binaria
+        roc_auc = roc_auc_score(col_verdadero, col_predicho)
+    else:
+        roc_auc = None  # Si es multiclase, roc_auc puede no ser aplicable o requerir otro enfoque
+    
+    # Crear DataFrame con resultados
+    resultados = pd.DataFrame({
+        'Métrica': ['Accuracy', 'F1-Score', 'Recall', 'ROC-AUC'],
+        'Valor': [accuracy, f1, recall, roc_auc]
+    })
+    
+    # Guardar datos y métricas en CSV
+    df.to_csv(archivo_salida, index=False)  # Guardar datos de verdad y predicciones
+    with open(archivo_salida, 'a') as f:  # Agregar métricas al archivo
+        resultados.to_csv(f, index=False)
+    
+    print(f"Métricas y datos guardados en {archivo_salida}")
 
 def calculate_fscore(y_test, y_pred):
     """
@@ -431,11 +467,23 @@ def cat_numerico(df, columnas):
 
 ###############ESCALADO############
 def z_score(v):
-    """Escala una columna usando el método Z-Score."""
-    print(type(v))
-    v = np.array(v, dtype=float) if isinstance(v, (list, np.ndarray, pd.Series)) else v
-    if not np.issubdtype(v.dtype, np.number):  # Verifica si es numérica
-        return v  # Retorna sin cambios si es texto
+    """Escala una columna usando el método Z-Score, asegurando que sea numérica."""
+    
+    # Imprime el tipo para depuración
+    print(f"Tipo de v: {type(v)}")
+
+    # Si v es un solo valor string (no una columna), lo devolvemos sin cambios
+    if isinstance(v, str):
+        return v
+    
+    # Convertimos a Serie si es necesario
+    if isinstance(v, (list, np.ndarray)):
+        v = pd.Series(v)
+
+    # Verificamos si es numérico
+    if not np.issubdtype(v.dtype, np.number):  
+        return v  # Retorna sin cambios si no es numérico
+
     return (v - v.mean()) / v.std()
 def maximum_absolute_scaling(df):
     """Escala columnas numéricas con media > 60 usando el escalado máximo absoluto."""
@@ -458,12 +506,23 @@ def min_max_scaling(v):
     return (v - v.min()) / (v.max() - v.min())
     return v_norm 
 def escaladoEstandar(df):
-    """Escala todo el DataFrame usando StandardScaler de sklearn."""
-    num_cols = df.select_dtypes(include=[np.number]).columns  # Selecciona solo numéricas
+    """Escala todo el DataFrame usando StandardScaler de sklearn sin modificar el original."""
+    df_scaled = df.copy()  # Copia el DataFrame para evitar modificaciones en el original
+    num_cols = df_scaled.select_dtypes(include=[np.number]).columns  # Selecciona solo columnas numéricas
     sc = StandardScaler()
-    df[num_cols] = sc.fit_transform(df[num_cols])  # Solo escala las columnas numéricas
-    return df
-
+    
+    # Guardamos los tipos originales
+    dtypes_originales = df_scaled[num_cols].dtypes  
+    
+    # Escalamos las columnas numéricas
+    df_scaled[num_cols] = sc.fit_transform(df_scaled[num_cols])
+    
+    # Restauramos el tipo de dato original para evitar problemas
+    for col in num_cols:
+        if np.issubdtype(dtypes_originales[col], np.integer):
+            df_scaled[col] = df_scaled[col].astype(int)  # Convierte de vuelta a enteros
+    
+    return df_scaled
 def process_text(text_feature):
     """
     Procesa las características de texto utilizando técnicas de vectorización como TF-IDF o BOW.
@@ -904,7 +963,7 @@ if __name__ == "__main__":
             #data.to_csv('output/data-prediction.csv', index=False)
             y_pred=X_devTestPred[args.prediction + "Prediccion"]
             
-
+            calcular_metricas_y_guardar(y_devTest, y_pred)
             
             # Calcula las métricas
             print(Fore.MAGENTA + "> F1-score micro:\n" + Fore.RESET, calculate_fscore(y_devTest, y_pred))
