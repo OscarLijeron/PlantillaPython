@@ -1,6 +1,6 @@
  -*- coding: utf-8 -*-
 """
-Script para la implementación del algoritmo kNN
+ScriN
 Recoge los datos de un fichero csv y los clasifica en función de los k vecinos más cercanos
 """
 
