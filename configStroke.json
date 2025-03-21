@@ -6,8 +6,9 @@
         "categorial_features":["no"],
         "missing_values": "imputar", 
         "impute_strategy": "mode",
-        "cols_imputar": [" "], 
-        "scaling": "minmax",
+        "cols_imputar": [" "],
+        "cols_outliers": ["bmi"],
+        "scaling": "zscore",
         "text_process": "tf-idf",
         "cols_concatenar":["no"],
         "cols_eliminar": ["no"],
@@ -18,7 +19,7 @@
 
     },
     "df_Caracteristicas":{
-        "Target":"v1",
+        "Target":"Especie",
         "Cols":" "
     },
     "kNN": {
