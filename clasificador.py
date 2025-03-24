@@ -673,14 +673,25 @@ def save_model(gs):
     try:
         with open('output/modelo.pkl', 'wb') as file:
             pickle.dump(gs, file)
-            print(Fore.CYAN+"Modelo guardado con éxito"+Fore.RESET)
-        with open('output/modelo.csv', 'w') as file:
+            print(Fore.CYAN + "Modelo guardado con éxito" + Fore.RESET)
+
+        # Obtener y ordenar resultados de mayor a menor por mean_test_score
+        results = sorted(
+            zip(gs.cv_results_['params'], gs.cv_results_['mean_test_score']),
+            key=lambda x: x[1],  
+            reverse=True  # Orden descendente
+        )
+
+        # Guardar en CSV
+        with open('output/modelo.csv', 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Params', 'Score'])
-            for params, score in zip(gs.cv_results_['params'], gs.cv_results_['mean_test_score']):
-                writer.writerow([params, score])
+            writer.writerows(results)  # Escribir filas ordenadas
+
+        print(Fore.GREEN + "Resultados guardados en CSV ordenados de mayor a menor" + Fore.RESET)
+
     except Exception as e:
-        print(Fore.RED+"Error al guardar el modelo"+Fore.RESET)
+        print(Fore.RED + "Error al guardar el modelo" + Fore.RESET)
         print(e)
 
 def mostrar_resultados(gs, x_dev, y_dev):
@@ -731,8 +742,8 @@ def kNN():
         gs.fit(x_train, y_train)
         end_time = time.time()
         for i in range(100):
-            time.sleep(random.uniform(0.06, 0.15))  # Esperamos un tiempo aleatorio
-            pbar.update(random.random()*2)  # Actualizamos la barra con un valor aleatorio
+            time.sleep(random.uniform(0.06, 0.15))  
+            pbar.update(random.random()*2)  
         pbar.n = 100
         pbar.last_print_n = 100
         pbar.update(0)
