@@ -3,24 +3,18 @@
         "Preprocesar?": "si",
         "unique_category_threshold": 51,
         "cat_num?": "si",
-        "categorial_features":["v1"],
-        "missing_values": "imputarNO", 
-        "impute_strategy": "mean",
-        "cols_imputar": [""],
-        "cols_outliers": ["no"], 
-        "scaling": "standarNo",
+        "categorial_features":["no"],
+        "missing_values": "imputar", 
+        "impute_strategy": "mode",
+        "cols_imputar": [" "],
+        "cols_outliers": ["no"],
+        "scaling": "zscore",
         "text_process": "tf-idf",
-        "cols_concatenar":["v2","New_Column_0", "New_Column_1", "New_Column_2"],
-        "cols_eliminar": ["New_Column_0", "New_Column_1", "New_Column_2"],
-        "normalize?": "si",
-        "normalize_features": ["v2"],
+        "cols_concatenar":["no"],
+        "cols_eliminar": ["no"],
+        "normalize?": "no",
         "normalize_vector":["minusculas","acentos","stopwords","caracEsp","lematizar"],
         "sampling": "undersampling"
-
-    },
-    "df_Caracteristicas":{
-        "Target":"v1",
-        "Cols":" "
     },
     "kNN": {
         "n_neighbors": [1, 3, 5],
@@ -48,3 +42,4 @@
     }
     
 }
+    
