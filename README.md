@@ -60,15 +60,25 @@ python clasificador.py -m train -a kNN -f iris.csv -p Especie -e accuracy -c 4 -
 
 ```json
 {
-    "preprocessing": {
-        "unique_category_threshold": 50,      // Numero de apariciones unicas para considerar una columna como categorica (int)
-        "drop_features": [],                  // Columnas a eliminar (lista de strings)
-        "missing_values": "impute",           // Estrategia para tratar los valores nulos (impute, drop)
-        "impute_strategy": "mean",            // Estrategia para imputar los valores nulos (mean, median, most_frequent)
-        "scaling": "minmax",                  // Estrategia para escalar los valores (minmax, normalizer, maxabs, standard)
-        "text_process": "tf-idf",             // Estrategia para procesar el texto (tf-idf, bow)
-        "sampling": "oversampling"            // Estrategia para tratar el desbalanceo de clases (oversampling, undersampling)
-    },
+    "preproceso":{ 
+    "Preprocesar?": "si", // Indica si se debe realizar preprocesamiento (sí o no)
+    "unique_category_threshold": 51, // Numero de apariciones unicas para considerar una columna como categorica (int)
+    "cat_num?": "si", // Indica si se deben convertir variables categóricas en numéricas
+    "categorial_features":["no"], // Lista de variables categóricas a procesar
+    "missing_values": "imputar", // Método de manejo de valores faltantes (imputar, drop)
+    "impute_strategy": "mode", // Estrategia de imputación (mean, mode, median)
+    "cols_imputar": [" "], // Lista de columnas en las que aplicar la imputación 
+    "cols_outliers": ["no"], // Lista de columnas en las que detectar y manejar outliers 
+    "scaling": "zscore", // Método de escalado de datos (standar, absmaxmin, minmax, zscore)
+    "text_process": "tf-idf", // Método de procesamiento de texto (tf-idf, bow)
+    "cols_concatenar":["no"], // Lista de columnas a concatenar (ninguna en este caso)
+    "cols_eliminar": ["no"], // Lista de columnas a eliminar (ninguna en este caso)
+    "normalize?": "no", // Indica si se debe normalizar la data (si, no)
+    "normalize_features": ["v2"], // Lista de variables a normalizar 
+    "normalize_vector":["minusculas","acentos","stopwords","caracEsp","lematizar"], // Operaciones de normalización en texto (minúsculas, quitar acentos, stopwords, caracteres especiales, lematizar)
+    "sampling": "undersampling" // Método de muestreo para balancear clases (undersampling, oversampling)
+}
+,
     "kNN": {
         "n_neighbors": [3, 5, 7],             // Numero de vecinos (lista de enteros)
         "weights": ["uniform", "distance"],   // Peso de los vecinos (uniform, distance)
