@@ -21,7 +21,7 @@ import re
 from colorama import Fore
 # Sklearn
 from sklearn.calibration import LabelEncoder
-from sklearn.metrics import f1_score, confusion_matrix, classification_report,recall_score, roc_auc_score,accuracy_score
+from sklearn.metrics import f1_score, confusion_matrix, classification_report,recall_score, roc_auc_score,accuracy_score, precision_score
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MaxAbsScaler, MinMaxScaler, Normalizer, StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -111,7 +111,7 @@ def load_data(file):
         sys.exit(1)'''
 
 # Funciones para calcular métricas
-def calcular_metricas_y_guardar(col_verdadero, col_predicho, archivo_salida="modeloSalida"):
+def calcular_metricas_y_guardar(col_verdadero, col_predicho, dataf, archivo_salida="modeloSalida"):
     #Crea un archivo csvdonde estan los valores reales predecidos por el modelo y al final escribe las metricasque ha sacado el modelo
     # Crear carpeta output si no existe
     output = "output"
@@ -119,15 +119,17 @@ def calcular_metricas_y_guardar(col_verdadero, col_predicho, archivo_salida="mod
     archivo_salida = os.path.join(output, archivo_salida)
     
     # Crear DataFrame con los datos proporcionados
-    df = pd.DataFrame({
+    '''df = pd.DataFrame({
         'Verdadero': col_verdadero,
         'Predicho': col_predicho
-    })
+    })'''
+    df=dataf
     
     # Calcular métricas
     accuracy = accuracy_score(col_verdadero, col_predicho)
     f1 = f1_score(col_verdadero, col_predicho, average='weighted')
     recall = recall_score(col_verdadero, col_predicho, average='weighted')
+    precision= precision_score(col_verdadero, col_predicho, average='weighted')
     
     # Asegurarse de que roc_auc_score sea adecuado según el tipo de problema
     if len(set(col_verdadero)) == 2:  # Solo aplica para clasificación binaria
@@ -137,14 +139,14 @@ def calcular_metricas_y_guardar(col_verdadero, col_predicho, archivo_salida="mod
     
     # Crear DataFrame con resultados
     resultados = pd.DataFrame({
-        'Métrica': ['Accuracy', 'F1-Score', 'Recall', 'ROC-AUC'],
-        'Valor': [accuracy, f1, recall, roc_auc]
+        'Métrica': ['Accuracy', 'F1-Score', 'Recall','Precision', 'ROC-AUC'],
+        'Valor': [accuracy, f1, recall, precision, roc_auc]
     })
     
     # Guardar datos y métricas en CSV
-    df.to_csv(archivo_salida, index=False)  # Guardar datos de verdad y predicciones
+    df.to_csv(archivo_salida, header=True, index=False)  # Guardar datos de verdad y predicciones
     with open(archivo_salida, 'a') as f:  # Agregar métricas al archivo
-        resultados.to_csv(f, index=False)
+        resultados.to_csv(f,header=True, index=False)
     
     print(f"Métricas y datos guardados en {archivo_salida}")
 
@@ -668,24 +670,27 @@ def save_model(gs):
 
     Excepciones:
     - Exception: Si ocurre algún error al guardar el modelo.
-
     """
     try:
         with open('output/modelo.pkl', 'wb') as file:
             pickle.dump(gs, file)
             print(Fore.CYAN + "Modelo guardado con éxito" + Fore.RESET)
 
-        # Obtener y ordenar resultados de mayor a menor por mean_test_score
+        # Verificar si las métricas existen en los resultados
+        mean_f1 = gs.cv_results_.get('mean_test_f1_score', [None] * len(gs.cv_results_['params']))
+        mean_accuracy = gs.cv_results_.get('mean_test_accuracy', [None] * len(gs.cv_results_['params']))
+        mean_custom = gs.cv_results_.get(f'mean_test_custom', [None] * len(gs.cv_results_['params']))
+
+        # Obtener y ordenar resultados si existen las métricas
         results = sorted(
-            zip(gs.cv_results_['params'], gs.cv_results_['mean_test_score']),
-            key=lambda x: x[1],  
-            reverse=True  # Orden descendente
+            zip(gs.cv_results_['params'], mean_custom, mean_f1, mean_accuracy),
+            key=lambda x: x[1] if x[1] is not None else -1, reverse=True
         )
 
         # Guardar en CSV
         with open('output/modelo.csv', 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Params', 'Score'])
+            writer.writerow(['Params', args.estimator, 'F1_Score', 'Accuracy'])
             writer.writerows(results)  # Escribir filas ordenadas
 
         print(Fore.GREEN + "Resultados guardados en CSV ordenados de mayor a menor" + Fore.RESET)
@@ -722,33 +727,38 @@ def mostrar_resultados(gs, x_dev, y_dev):
 def kNN():
     """
     Función para implementar el algoritmo kNN.
-    Hace un barrido de hiperparametros para encontrar los parametros optimos
+    Hace un barrido de hiperparámetros para encontrar los parámetros óptimos.
 
-    :param data: Conjunto de datos para realizar la clasificación.
-    :type data: pandas.DataFrame
     :return: Tupla con la clasificación de los datos.
     :rtype: tuple
     """
     global data
 
-    # Dividimos los datos en entrenamiento y dev
+    # Dividimos los datos en entrenamiento y validación
     x_train, x_dev, y_train, y_dev = divide_data()
     
-    # Hacemos un barrido de hiperparametros
-
+    # Definimos los criterios de evaluación
+    scoring = {
+        'custom': args.estimator,
+        'f1_score': 'f1_weighted',
+        'accuracy': 'accuracy'
+    }
+    
     with tqdm(total=100, desc='Procesando kNN', unit='iter', leave=True) as pbar:
-        gs = GridSearchCV(KNeighborsClassifier(), args.kNN, cv=5, n_jobs=args.cpu, scoring=args.estimator)
+        gs = GridSearchCV(KNeighborsClassifier(), args.kNN, cv=5, n_jobs=args.cpu, scoring=scoring, refit='custom')
         start_time = time.time()
         gs.fit(x_train, y_train)
         end_time = time.time()
+        
         for i in range(100):
             time.sleep(random.uniform(0.06, 0.15))  
-            pbar.update(random.random()*2)  
+            pbar.update(random.random() * 2)  
         pbar.n = 100
         pbar.last_print_n = 100
         pbar.update(0)
+    
     execution_time = end_time - start_time
-    print("Tiempo de ejecución:"+Fore.MAGENTA, execution_time,Fore.RESET+ "segundos")
+    print("Tiempo de ejecución:" + Fore.MAGENTA, execution_time, Fore.RESET + " segundos")
     
     # Mostramos los resultados
     mostrar_resultados(gs, x_dev, y_dev)
@@ -768,9 +778,16 @@ def decision_tree():
     # Dividimos los datos en entrenamiento y dev
     x_train, x_dev, y_train, y_dev = divide_data()
     
+    # Definimos los criterios de evaluación
+    scoring = {
+        'custom': args.estimator,
+        'f1_score': 'f1_weighted',
+        'accuracy': 'accuracy'
+    }
+
     # Hacemos un barrido de hiperparametros
     with tqdm(total=100, desc='Procesando decision tree', unit='iter', leave=True) as pbar:
-        gs = GridSearchCV(DecisionTreeClassifier(), args.decision_tree, cv=5, n_jobs=args.cpu, scoring=args.estimator)
+        gs = GridSearchCV(DecisionTreeClassifier(), args.decision_tree, cv=5, n_jobs=args.cpu, scoring=scoring, refit='custom')
         start_time = time.time()
         gs.fit(x_train, y_train)
         end_time = time.time()
@@ -804,10 +821,17 @@ def random_forest():
     
     # Dividimos los datos en entrenamiento y dev
     x_train, x_dev, y_train, y_dev = divide_data()
+
+    # Definimos los criterios de evaluación
+    scoring = {
+        'custom': args.estimator,
+        'f1_score': 'f1_weighted',
+        'accuracy': 'accuracy'
+    }
     
     # Hacemos un barrido de hiperparametros
     with tqdm(total=100, desc='Procesando random forest', unit='iter', leave=True) as pbar:
-        gs = GridSearchCV(RandomForestClassifier(), args.random_forest, cv=5, n_jobs=args.cpu, scoring=args.estimator)
+        gs = GridSearchCV(RandomForestClassifier(), args.random_forest, cv=5, n_jobs=args.cpu, scoring=scoring, refit='custom')
         start_time = time.time()
         gs.fit(x_train, y_train)
         end_time = time.time()
@@ -876,16 +900,21 @@ def predictTest(X_devTest):
     Retorna:
         X_devTest:Datos evaaluados con el targert
     """
-    
-    # Verifica si X_devTest es un array de NumPy y lo convierte en DataFrame si es necesario
+    global data
     if not isinstance(X_devTest, pd.DataFrame):
-        X_devTest = pd.DataFrame(X_devTest)
+        X_devTest = pd.DataFrame(X_devTest, columns=data.columns[:-1])
+
+
 
     # Predecimos
     prediction = model.predict(X_devTest)
     
     prediction_column_name = args.prediction + "Prediccion"
+
+    print(X_devTest.columns)  # Asegura que X_devTest tenga nombres de columnas
+
     X_devTest = pd.concat([X_devTest, pd.DataFrame(prediction, columns=[prediction_column_name])], axis=1)
+
     return X_devTest
 
 
@@ -973,8 +1002,8 @@ if __name__ == "__main__":
             # Guardamos el dataframe con la prediccion
             #data.to_csv('output/data-prediction.csv', index=False)
             y_pred=X_devTestPred[args.prediction + "Prediccion"]
-            
-            calcular_metricas_y_guardar(y_devTest, y_pred)
+            dataf=pd.concat([X_devTestPred, pd.DataFrame(y_devTest, columns=["Target"])], axis=1)
+            calcular_metricas_y_guardar(y_devTest, y_pred, dataf)
             
             # Calcula las métricas
             print(Fore.MAGENTA + "> F1-score micro:\n" + Fore.RESET, calculate_fscore(y_devTest, y_pred))
