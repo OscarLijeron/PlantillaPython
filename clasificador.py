@@ -20,6 +20,7 @@ import unicodedata
 import re
 from colorama import Fore
 # Sklearn
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.calibration import LabelEncoder
 from sklearn.metrics import f1_score, confusion_matrix, classification_report,recall_score, roc_auc_score,accuracy_score, precision_score
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -38,7 +39,7 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 # Imblearn
 from imblearn.under_sampling import RandomUnderSampler
-from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import RandomOverSampler,SMOTE,ADASYN
 from tqdm import tqdm
 
 # Funciones auxiliares
@@ -595,6 +596,21 @@ def over_under_sampling():
                 y = pd.Series(y, name=args.prediction)
                 data = pd.concat([x, y], axis=1)
                 print(Fore.GREEN+"Undersampling realizado con éxito"+Fore.RESET)
+            elif args.preproceso["sampling"] == "SMOTE":
+                x = data.drop(columns=[args.prediction])
+                y = data[args.prediction]
+                x,y=SMOTE().fit_resample(x,y)
+                x = pd.DataFrame(x, columns=data.drop(columns=[args.prediction]).columns)
+                y = pd.Series(y, name=args.prediction)
+                data = pd.concat([x, y], axis=1)
+            elif args.preproceso["sampling"] == "ADASYN":
+                x = data.drop(columns=[args.prediction])
+                y = data[args.prediction]
+                x,y=ADASYN().fit_resample(x,y)
+                x = pd.DataFrame(x, columns=data.drop(columns=[args.prediction]).columns)
+                y = pd.Series(y, name=args.prediction)
+                data = pd.concat([x, y], axis=1)
+
             else:
                 print(Fore.YELLOW+"No se están realizando oversampling o undersampling"+Fore.RESET)
         except Exception as e:
@@ -680,17 +696,18 @@ def save_model(gs):
         mean_f1 = gs.cv_results_.get('mean_test_f1_score', [None] * len(gs.cv_results_['params']))
         mean_accuracy = gs.cv_results_.get('mean_test_accuracy', [None] * len(gs.cv_results_['params']))
         mean_custom = gs.cv_results_.get(f'mean_test_custom', [None] * len(gs.cv_results_['params']))
+        mean_recall= gs.cv_results_.get(f'mean_test_recall', [None] * len(gs.cv_results_['params']))
 
         # Obtener y ordenar resultados si existen las métricas
         results = sorted(
-            zip(gs.cv_results_['params'], mean_custom, mean_f1, mean_accuracy),
+            zip(gs.cv_results_['params'], mean_custom, mean_f1, mean_accuracy,mean_recall),
             key=lambda x: x[1] if x[1] is not None else -1, reverse=True
         )
 
         # Guardar en CSV
         with open('output/modelo.csv', 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Params', args.estimator, 'F1_Score', 'Accuracy'])
+            writer.writerow(['Params', args.estimator, 'F1_Score', 'Accuracy','Recall'])
             writer.writerows(results)  # Escribir filas ordenadas
 
         print(Fore.GREEN + "Resultados guardados en CSV ordenados de mayor a menor" + Fore.RESET)
@@ -741,7 +758,8 @@ def kNN():
     scoring = {
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
-        'accuracy': 'accuracy'
+        'accuracy': 'accuracy',
+        'recall':'recall_weighted'
     }
     
     with tqdm(total=100, desc='Procesando kNN', unit='iter', leave=True) as pbar:
@@ -782,7 +800,8 @@ def decision_tree():
     scoring = {
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
-        'accuracy': 'accuracy'
+        'accuracy': 'accuracy',
+        'recall':'recall_weighted'
     }
 
     # Hacemos un barrido de hiperparametros
@@ -826,7 +845,8 @@ def random_forest():
     scoring = {
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
-        'accuracy': 'accuracy'
+        'accuracy': 'accuracy',
+        'recall':'recall_weighted'
     }
     
     # Hacemos un barrido de hiperparametros
@@ -838,6 +858,39 @@ def random_forest():
         for i in range(100):
             time.sleep(random.uniform(0.06, 0.15))  # Esperamos un tiempo aleatorio
             pbar.update(random.random()*2)  # Actualizamos la barra con un valor aleatorio
+        pbar.n = 100
+        pbar.last_print_n = 100
+        pbar.update(0)
+    execution_time = end_time - start_time
+    print("Tiempo de ejecución:"+Fore.MAGENTA, execution_time,Fore.RESET+ "segundos")
+    
+    # Mostramos los resultados
+    mostrar_resultados(gs, x_dev, y_dev)
+    
+    # Guardamos el modelo utilizando pickle
+    save_model(gs)
+def naive_bayes():
+
+    # Dividimos los datos en entrenamiento y dev
+    x_train, x_dev, y_train, y_dev = divide_data()
+
+    # Definimos los criterios de evaluación
+    scoring = {
+        'custom': args.estimator,
+        'f1_score': 'f1',
+        'accuracy': 'accuracy',
+        'recall':'recall'
+    }
+
+    # Hacemos un barrido de hiperparametros
+    with tqdm(total=100, desc='Procesando naive bayes', unit='iter', leave=True) as pbar:
+        gs = GridSearchCV(MultinomialNB(), args.naive_bayes, cv=5, n_jobs=args.cpu, scoring=scoring,refit='custom')
+        start_time = time.time()
+        gs.fit(x_train, y_train)
+        end_time = time.time()
+        for i in range(100):
+            time.sleep(random.uniform(0.06, 0.15)) 
+            pbar.update(random.random()*2)  
         pbar.n = 100
         pbar.last_print_n = 100
         pbar.update(0)
@@ -986,6 +1039,13 @@ if __name__ == "__main__":
                 sys.exit(0)
             except Exception as e:
                 print(e)
+        elif args.algorithm == "naive_bayes":
+            try:
+                naive_bayes()
+                print(Fore.GREEN+"Algoritmo naive bayes ejecutado con éxito"+Fore.RESET)
+                sys.exit(0)
+            except Exception as e:
+                print(e)      
         else:
             print(Fore.RED+"Algoritmo no soportado"+Fore.RESET)
             sys.exit(1)
