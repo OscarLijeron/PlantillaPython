@@ -284,8 +284,16 @@ def preproceso():
             else:
                 print(f"⚠️ Advertencia: No se encontraron las columnas {cols_imputar} en X_train. Verifica los nombres.")
         elif args.preproceso['missing_values'] == 'drop':
-            cols_imputar = numerical_feature
+            #cols_imputar = numerical_feature
+            # Para cubrir varios casos raros:
+            
+            cols_imputar = args.preproceso['cols_imputar']
+
+
             print(f"🗑 Eliminando filas con valores faltantes en las columnas: {cols_imputar}")
+            print(cols_imputar)
+            print(type(cols_imputar))
+
             data.dropna(subset=cols_imputar, inplace=True)    
         print("Valores faltantes en data:", data.isnull().sum())
 
@@ -330,11 +338,13 @@ def preproceso():
         if args.preproceso['cols_eliminar'][0]!= "no":
             cols_eliminar=args.preproceso['cols_eliminar']
             data = data.drop(cols_eliminar, axis=1)
-            
+        
         # Realizamos Oversampling o Undersampling
         over_under_sampling()
         print("Despues del preprocesado")  
         print(data.head())  # Esto imprimirá las primeras 5 filas de todas las columnas por defecto
+        
+
     return data
 
     
@@ -538,24 +548,41 @@ def process_text(text_feature):
     try:
         if text_feature.columns.size > 0:
             if args.preproceso["text_process"] == "tf-idf":           
-               tfidf_vectorizer = TfidfVectorizer()
-               text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
-               tfidf_matrix = tfidf_vectorizer.fit_transform(text_data)
-               text_features_df = pd.DataFrame(tfidf_matrix.toarray(), columns=tfidf_vectorizer.get_feature_names_out())
-               data = pd.concat([data, text_features_df], axis=1)
-               data.drop(text_feature.columns, axis=1, inplace=True)
-               print(Fore.GREEN+"Texto tratado con éxito usando TF-IDF"+Fore.RESET)
+                tfidf_vectorizer = TfidfVectorizer()
+                text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
+                tfidf_matrix = tfidf_vectorizer.fit_transform(text_data)
+
+                # ✅ Índice alineado para evitar NaNs ocultos
+                text_features_df = pd.DataFrame(
+                    tfidf_matrix.toarray(),
+                    columns=tfidf_vectorizer.get_feature_names_out(),
+                    index=data.index
+                )
+
+                data = pd.concat([data, text_features_df], axis=1)
+                data.drop(text_feature.columns, axis=1, inplace=True)
+
+                print(Fore.GREEN + "Texto tratado con éxito usando TF-IDF" + Fore.RESET)
+
             elif args.preproceso["text_process"] == "bow":
                 bow_vecotirizer = CountVectorizer()
                 text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
                 bow_matrix = bow_vecotirizer.fit_transform(text_data)
-                text_features_df = pd.DataFrame(bow_matrix.toarray(), columns=bow_vecotirizer.get_feature_names_out())
+
+                # También puede alinearse por si acaso
+                text_features_df = pd.DataFrame(
+                    bow_matrix.toarray(),
+                    columns=bow_vecotirizer.get_feature_names_out(),
+                    index=data.index
+                )
+
                 data = pd.concat([data, text_features_df], axis=1)
-                print(Fore.GREEN+"Texto tratado con éxito usando BOW"+Fore.RESET)
+                print(Fore.GREEN + "Texto tratado con éxito usando BOW" + Fore.RESET)
+
             else:
-                print(Fore.YELLOW+"No se están tratando los textos"+Fore.RESET)
+                print(Fore.YELLOW + "No se están tratando los textos" + Fore.RESET)
         else:
-            print(Fore.YELLOW+"No se han encontrado columnas de texto a procesar"+Fore.RESET)
+            print(Fore.YELLOW + "No se han encontrado columnas de texto a procesar" + Fore.RESET)
     except Exception as e:
         print(Fore.RED+"Error al tratar el texto"+Fore.RESET)
         print(e)
