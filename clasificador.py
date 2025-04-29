@@ -547,8 +547,12 @@ def process_text(text_feature):
     global data
     try:
         if text_feature.columns.size > 0:
-            if args.preproceso["text_process"] == "tf-idf":           
-                tfidf_vectorizer = TfidfVectorizer()
+            if args.preproceso["max_arg_textProcessor"]!="no":
+                max_featuresPre=args.preproceso["max_arg_textProcessor"]
+            else:
+                max_featuresPre=None
+            if args.preproceso["text_process"] == "tf-idf":     
+                tfidf_vectorizer = TfidfVectorizer(max_features=max_featuresPre)
                 text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
                 tfidf_matrix = tfidf_vectorizer.fit_transform(text_data)
 
@@ -699,10 +703,25 @@ def divide_data():
     print(f"Shape de X_train: {x_train.shape}")
     print(f"Shape de X_dev: {x_dev.shape}")
     print(f"Shape de X_devTest: {x_devTest.shape}")
+
+    info_y("y_train", y_train)
+    info_y("y_dev", y_dev)
+    info_y("y_devTest", y_devTest)
+
     if args.mode=='train' :
         return x_train, x_dev, y_train, y_dev
     elif args.mode == "test":
         return x_devTest,y_devTest
+# Información de las Y
+def info_y(nombre, y_array):
+    valores_unicos, conteos = np.unique(y_array, return_counts=True)
+    print(f"\n[{nombre}]")
+    print(f"Número de valores distintos: {len(valores_unicos)}")
+    print(f"Tipos de datos: {[type(val) for val in valores_unicos]}")
+    print("Valores únicos y sus cantidades:")
+    for valor, conteo in zip(valores_unicos, conteos):
+        print(f"  Valor {valor}: {conteo} ejemplos")
+
 
 def save_model(gs):
     """
@@ -724,17 +743,18 @@ def save_model(gs):
         mean_accuracy = gs.cv_results_.get('mean_test_accuracy', [None] * len(gs.cv_results_['params']))
         mean_custom = gs.cv_results_.get(f'mean_test_custom', [None] * len(gs.cv_results_['params']))
         mean_recall= gs.cv_results_.get(f'mean_test_recall', [None] * len(gs.cv_results_['params']))
+        mean_precision= gs.cv_results_.get(f'mean_test_precision', [None] * len(gs.cv_results_['params']))
 
         # Obtener y ordenar resultados si existen las métricas
         results = sorted(
-            zip(gs.cv_results_['params'], mean_custom, mean_f1, mean_accuracy,mean_recall),
+            zip(gs.cv_results_['params'], mean_custom, mean_f1, mean_accuracy,mean_recall,mean_precision),
             key=lambda x: x[1] if x[1] is not None else -1, reverse=True
         )
 
         # Guardar en CSV
         with open('output/modelo.csv', 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Params', args.estimator, 'F1_Score', 'Accuracy','Recall'])
+            writer.writerow(['Params', args.estimator, 'F1_Score', 'Accuracy','Recall','Precision'])
             writer.writerows(results)  # Escribir filas ordenadas
 
         print(Fore.GREEN + "Resultados guardados en CSV ordenados de mayor a menor" + Fore.RESET)
@@ -786,7 +806,10 @@ def kNN():
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
         'accuracy': 'accuracy',
-        'recall':'recall_weighted'
+        'recall':'recall_weighted',
+        'Precision':'precision_weighted'
+        
+
     }
     
     with tqdm(total=100, desc='Procesando kNN', unit='iter', leave=True) as pbar:
@@ -828,7 +851,8 @@ def decision_tree():
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
         'accuracy': 'accuracy',
-        'recall':'recall_weighted'
+        'recall':'recall_weighted',
+        'precision':'precision_weighted'
     }
 
     # Hacemos un barrido de hiperparametros
@@ -873,7 +897,8 @@ def random_forest():
         'custom': args.estimator,
         'f1_score': 'f1_weighted',
         'accuracy': 'accuracy',
-        'recall':'recall_weighted'
+        'recall':'recall_weighted',
+        'precision':'precision_weighted'
     }
     
     # Hacemos un barrido de hiperparametros
@@ -904,9 +929,10 @@ def naive_bayes():
     # Definimos los criterios de evaluación
     scoring = {
         'custom': args.estimator,
-        'f1_score': 'f1',
+        'f1_score': 'f1_weighted',
         'accuracy': 'accuracy',
-        'recall':'recall'
+        'recall':'recall_weighted',
+        'precision':'precision_weighted'
     }
 
     # Hacemos un barrido de hiperparametros
@@ -960,17 +986,19 @@ def predict():
         Ninguno
 
     Retorna:
-        Ninguno
+        los datos con la prediccion
     """
     global data
-   # Seleccionamos las características (todas las columnas menos la de predicción)
-    x_data = data.drop(columns=[args.prediction])
+   # Seleccionamos las características (todas las columnas menos la de predicción)(si la hay)
+    x_data = data.drop(columns=[args.prediction], errors='ignore')
 
     # Predecimos
     prediction = model.predict(x_data)
     
     prediction_column_name = args.prediction + "Prediccion"
-    data = pd.concat([data, pd.DataFrame(prediction, columns=[prediction_column_name])], axis=1)
+    data1 = load_data(args.file)
+    data1 = pd.concat([data1, pd.DataFrame(prediction, columns=[prediction_column_name])], axis=1)
+    return data1
 def predictTest(X_devTest):
     """
     Realiza una predicción utilizando el modelo entrenado y guarda los resultados en un archivo CSV.
@@ -1100,6 +1128,20 @@ if __name__ == "__main__":
 
             print(Fore.GREEN + "Predicción guardada con éxito" + Fore.RESET)
             sys.exit(0)
+        except Exception as e:
+            print("adios")
+            print(e)
+            sys.exit(1)
+    elif args.mode == "prediction":
+        # Cargamos el modelo
+        print("\n- Cargando modelo...")
+        model = load_model()
+        # Predecimos
+        print("\n- Prediciendo...")
+        try:
+            data1=predict()
+            print(Fore.GREEN+"Predicción realizada con éxito"+Fore.RESET)
+            data1.to_csv('output/Prediction.csv', index=False)
         except Exception as e:
             print("adios")
             print(e)
