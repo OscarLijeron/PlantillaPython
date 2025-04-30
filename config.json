@@ -14,7 +14,7 @@
         "cols_concatenar":["no"],
         "cols_eliminar": ["no"],
         "normalize?": "si",
-        "normalize_vector":["minusculas","acentos","stopwords","caracEsp","lematizar"],
+        "normalize_vector":["minusculas","acentos","stopwords","caracEspNO","lematizar"],
         "sampling": "oversampling"
     },
     "kNN": {

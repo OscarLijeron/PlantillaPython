@@ -8,7 +8,7 @@
         "impute_strategy": "mode",
         "cols_imputar": [""],
         "cols_outliers": ["no"],
-        "scaling": "zscore",
+        "scaling": "zscoreNO",
         "text_process": "tf-idf",
         "max_arg_textProcessor": 3000,
         "cols_concatenar":["no"],
