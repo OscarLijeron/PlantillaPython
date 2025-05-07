@@ -35,7 +35,7 @@ def procesar_fila(row):
     return resultado
 
 if __name__ == '__main__':
-    df = pd.read_csv('airbnb.csv')
+    df = pd.read_csv('Turkey_translated.csv')
 
     # Parsear JSON de forma segura
     df['reviews'] = df['reviews'].apply(safe_json_loads)

@@ -18,6 +18,7 @@ import csv
 import os
 import unicodedata
 import re
+import joblib
 from colorama import Fore
 # Sklearn
 from sklearn.naive_bayes import MultinomialNB
@@ -302,7 +303,7 @@ def preproceso():
                 remove_outliers_iqr(colum)
         
         # Pasar de categorial a númerico
-        if args.preproceso['cat_num?']=='si' :
+        if args.preproceso['cat_num?']=='si':
             if args.preproceso['categorial_features'][0]!='no' :
                 cols_cat_num=args.preproceso['categorial_features']
             else:
@@ -311,20 +312,21 @@ def preproceso():
             for col in categorical_feature:
                 print(f"Valores únicos en {col}: {data[col].unique()}")
 
-        if args.preproceso['normalize?']=='si' :
+        if args.preproceso['normalize?']=='si':
             cols_simplificar=text_feature
             for col in cols_simplificar:
                 data[col] = data[col].fillna('').apply(lambda x: limpiar_texto(x))
         print(data.head())  # Esto imprimirá las primeras 5 filas de todas las columnas por defecto
+        
         process_text(text_feature)
         
-        if args.preproceso['scaling']=='standar' :
+        if args.preproceso['scaling']=='standar':
             # Escalamos los datos de forma standard
             data=escaladoEstandar(data)
-        elif args.preproceso['scaling']=='absmaxmin' :
+        elif args.preproceso['scaling']=='absmaxmin':
             # Escalamos los datos de forma absminmax
             data=maximum_absolute_scaling(data)
-        elif args.preproceso['scaling']=='minmax' :
+        elif args.preproceso['scaling']=='minmax':
             # Escalamos los datos de forma minmax
             cols=data.columns
             for col in cols :
@@ -551,10 +553,15 @@ def process_text(text_feature):
                 max_featuresPre=args.preproceso["max_arg_textProcessor"]
             else:
                 max_featuresPre=None
+            text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
             if args.preproceso["text_process"] == "tf-idf":     
-                tfidf_vectorizer = TfidfVectorizer(max_features=max_featuresPre)
-                text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
-                tfidf_matrix = tfidf_vectorizer.fit_transform(text_data)
+                if args.mode == "train":
+                    tfidf_vectorizer = TfidfVectorizer(max_features=max_featuresPre)
+                    tfidf_matrix = tfidf_vectorizer.fit_transform(text_data)
+                    joblib.dump(tfidf_vectorizer, "tfidf_vectorizer.pkl")
+                else:  # modo == "predict o test"
+                    tfidf_vectorizer = joblib.load("tfidf_vectorizer.pkl")
+                    tfidf_matrix = tfidf_vectorizer.transform(text_data)
 
                 # ✅ Índice alineado para evitar NaNs ocultos
                 text_features_df = pd.DataFrame(
@@ -569,9 +576,13 @@ def process_text(text_feature):
                 print(Fore.GREEN + "Texto tratado con éxito usando TF-IDF" + Fore.RESET)
 
             elif args.preproceso["text_process"] == "bow":
-                bow_vecotirizer = CountVectorizer()
-                text_data = data[text_feature.columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
-                bow_matrix = bow_vecotirizer.fit_transform(text_data)
+                if args.mode == "train":
+                    bow_vectorizer = CountVectorizer()
+                    bow_matrix = bow_vectorizer.fit_transform(text_data)
+                    joblib.dump(bow_vectorizer, "bow_vectorizer.pkl")
+                else:
+                    bow_vectorizer = joblib.load("bow_vectorizer.pkl")
+                    bow_matrix = bow_vectorizer.transform(text_data)
 
                 # También puede alinearse por si acaso
                 text_features_df = pd.DataFrame(
@@ -607,7 +618,7 @@ def over_under_sampling():
     """
     
     global data
-    if args.mode != "test":
+    if args.mode == "train":
         try:
             if args.preproceso["sampling"] == "oversampling":
                 ros = RandomOverSampler(sampling_strategy='minority', random_state=42)

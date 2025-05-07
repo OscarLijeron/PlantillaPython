@@ -11,7 +11,7 @@
         "scaling": "zscore",
         "text_process": "tf-idf",
         "cols_concatenar":["no"],
-        "cols_eliminar": ["no"],
+        "cols_eliminar": ["apartment_id"],
         "normalize?": "no",
         "normalize_vector":["minusculas","acentos","stopwords","caracEsp","lematizar"],
         "sampling": "undersampling"
